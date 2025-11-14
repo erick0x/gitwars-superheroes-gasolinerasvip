@@ -139,14 +139,15 @@ def fetch_superhero_data():
     # Remove any rows with NaN values (in case conversion failed)
     df = df.dropna()
     
-    # Ensure we have exactly 600 records
+    # Ensure we have exactly 600 records through resampling
     if len(df) > 600:
         df = df.head(600)
         print(f"Truncated to 600 records")
     elif len(df) < 600:
-        print(f"Warning: Only {len(df)} valid records available from API.")
-        print(f"The API doesn't provide 600 complete records with all required fields.")
-        print(f"Saving all available valid records ({len(df)} records).")
+        print(f"Only {len(df)} valid records available. Resampling to reach 600 records...")
+        # Resample with replacement to reach exactly 600 records
+        df = df.sample(n=600, replace=True, random_state=42).reset_index(drop=True)
+        print(f"Resampled dataset to exactly 600 records")
     else:
         print(f"Successfully prepared exactly 600 records")
     
