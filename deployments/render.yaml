@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: superhero-api-gasolinerasvip
+    runtime: docker
+    repo: https://github.com/tu-usuario/gitwars-superheroes-lab10
+    branch: main
+    dockerfilePath: ./deployments/Dockerfile
+    plan: free
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+    healthCheckPath: /health
