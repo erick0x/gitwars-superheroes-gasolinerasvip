@@ -22,7 +22,7 @@ class FeaturesRaw(BaseModel):
     speed: Union[float, int] = 0
     durability: Union[float, int] = 0
     combat: Union[float, int] = 0
-    height: Union[str, float, int] = "0'0"  # Puede ser "6'8", "180 cm", o 180.0
+    height: Union[str, float, int] = "0'0"  # Puede ser "3'2"", "6'8", "180 cm", o 180.0
     weight: Union[str, float, int] = "0 kg"  # Puede ser "180 lb", "80 kg", o 80.0
 
 class PredictionRequest(BaseModel):
@@ -48,12 +48,12 @@ class HealthResponse(BaseModel):
     scaler_loaded: bool
 
 # =============================================================================
-# FUNCIONES DE PREPROCESAMIENTO (IGUAL QUE ELEMENTO 0)
+# FUNCIONES DE PREPROCESAMIENTO MEJORADAS
 # =============================================================================
 
 def convert_to_cm(height_input: Union[str, float, int]) -> float:
     """
-    Convierte altura a centímetros (igual que Elemento 0)
+    Convierte altura a centímetros - MEJORADA para pulgadas
     """
     if height_input is None:
         raise ValueError("La altura no puede ser None")
@@ -87,6 +87,16 @@ def convert_to_cm(height_input: Union[str, float, int]) -> float:
         except (ValueError, IndexError):
             pass
     
+    # NUEVO: Si está solo en pulgadas (formato: "72" o "72in")
+    if '"' in height_str or "in" in height_str.lower():
+        try:
+            inches_str = height_str.replace('"', '').replace('in', '').replace('IN', '').strip()
+            inches = float(inches_str)
+            cm = inches * 2.54
+            return round(cm, 2)
+        except ValueError:
+            pass
+    
     # Intentar convertir directamente
     try:
         return float(height_str)
@@ -95,7 +105,7 @@ def convert_to_cm(height_input: Union[str, float, int]) -> float:
 
 def convert_to_kg(weight_input: Union[str, float, int]) -> float:
     """
-    Convierte peso a kilogramos (igual que Elemento 0)
+    Convierte peso a kilogramos
     """
     if weight_input is None:
         raise ValueError("El peso no puede ser None")
@@ -133,11 +143,11 @@ def convert_to_kg(weight_input: Union[str, float, int]) -> float:
         raise ValueError(f"No se pudo convertir peso: {weight_input}")
 
 # =============================================================================
-# CONFIGURACIÓN FASTAPI CON BUEN DISEÑO
+# CONFIGURACIÓN FASTAPI
 # =============================================================================
 
 app = FastAPI(
-    title=" SuperHero Power Predictor API",
+    title="SuperHero Power Predictor API",
     description="""
     API para predecir el poder de superhéroes
     
@@ -148,7 +158,7 @@ app = FastAPI(
     
     Equipo: GasolinerasVIP
     """,
-    version="2.0.0",
+    version="2.1.0",
     contact={
         "name": "Equipo GasolinerasVIP",
         "url": "https://github.com/erick0x/gitwars-superheroes-lab10",
@@ -163,7 +173,7 @@ app = FastAPI(
 )
 
 # =============================================================================
-# CARGA DE MODELOS (al iniciar la app)
+# CARGA DE MODELOS
 # =============================================================================
 
 def load_model_resources():
@@ -204,7 +214,7 @@ except Exception as e:
 async def root():
     """Página de inicio redirige a docs"""
     return {
-        "message": " Bienvenido a SuperHero Power Predictor API",
+        "message": "Bienvenido a SuperHero Power Predictor API",
         "team": "GasolinerasVIP",
         "docs_url": "/docs",
         "health_check": "/health"
@@ -212,9 +222,7 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """
-    Verificación de salud del servicio y recursos
-    """
+    """Verificación de salud del servicio y recursos"""
     return HealthResponse(
         status="ok" if MODEL_LOADED else "error",
         timestamp=datetime.now().isoformat(),
@@ -224,9 +232,7 @@ async def health_check():
 
 @app.get("/info", response_model=InfoResponse)
 async def get_info():
-    """
-    Información completa del equipo, modelo y preprocesamiento
-    """
+    """Información completa del equipo, modelo y preprocesamiento"""
     return InfoResponse(
         team_name="GasolinerasVIP",
         model_type="Random Forest Regressor",
@@ -236,11 +242,11 @@ async def get_info():
             "random_state": 42
         },
         preprocessing=[
-            "Conversión automática de unidades: pies/libras a cm/kg",
+            "Conversión automática de unidades: pies/pulgadas/libras a cm/kg",
             "StandardScaler para normalización de características",
             "Manejo de valores faltantes con imputación por media"
         ],
-        api_version="2.0.0",
+        api_version="2.1.0",
         endpoints=[
             "GET /health - Verificación de salud",
             "GET /info - Información del modelo", 
@@ -254,12 +260,12 @@ async def predict_power(request: PredictionRequest):
     """
     Predice el poder de un superhéroe basado en sus características
     
-    **Características de entrada:**
-    - `intelligence`, `strength`, `speed`, `durability`, `combat`: Valores entre 0-100
-    - `height`: Puede ser "6'8"", "180 cm", o 180.0
-    - `weight`: Puede ser "980 lb", "80 kg", o 80.0
+    Características de entrada:
+    - intelligence, strength, speed, durability, combat: Valores entre 0-100
+    - height: Puede ser "3'2"", "6'8"", "72in", "180 cm", o 180.0
+    - weight: Puede ser "980 lb", "80 kg", o 80.0
     
-    **Ejemplo de request:**
+    Ejemplo de entrada en cm:
     ```json
     {
         "features": {
@@ -268,8 +274,8 @@ async def predict_power(request: PredictionRequest):
             "speed": 70,
             "durability": 80,
             "combat": 65,
-            "height": "6'1\"",
-            "weight": "185 lb"
+            "height": "185",
+            "weight": "85 kg"
         }
     }
     ```
@@ -283,26 +289,30 @@ async def predict_power(request: PredictionRequest):
     try:
         logger.info(f"📥 Recibida solicitud de predicción")
         
-        # 1. CONVERSIÓN DE UNIDADES (igual que Elemento 0)
+        # 1. VALIDACIÓN DE RANGOS (0-100)
+        stats = {
+            'intelligence': request.features.intelligence,
+            'strength': request.features.strength,
+            'speed': request.features.speed, 
+            'durability': request.features.durability,
+            'combat': request.features.combat
+        }
+        
+        invalid_stats = []
+        for stat_name, stat_value in stats.items():
+            if stat_value > 100:
+                invalid_stats.append(f"{stat_name}: {stat_value} (máximo permitido: 100)")
+        
+        if invalid_stats:
+            error_msg = "Las siguientes características exceden el valor máximo de 100:\n" + "\n".join(invalid_stats)
+            raise ValueError(error_msg)
+        
+        # 2. CONVERSIÓN DE UNIDADES
         height_cm = convert_to_cm(request.features.height)
         weight_kg = convert_to_kg(request.features.weight)
         
         logger.info(f"🔧 Unidades convertidas: {request.features.height} -> {height_cm} cm, "
                    f"{request.features.weight} -> {weight_kg} kg")
-        
-        # 2. VALIDACIÓN DE RANGOS
-        stats = [
-            request.features.intelligence,
-            request.features.strength,
-            request.features.speed, 
-            request.features.durability,
-            request.features.combat
-        ]
-        
-        for i, stat in enumerate(stats):
-            if not (0 <= stat <= 100):
-                raise ValueError(f"Stat {['intelligence','strength','speed','durability','combat'][i]} "
-                               f"debe estar entre 0-100, se recibió: {stat}")
         
         # 3. PREPARACIÓN DE CARACTERÍSTICAS
         input_features = np.array([[
@@ -315,7 +325,7 @@ async def predict_power(request: PredictionRequest):
             weight_kg
         ]])
         
-        # 4. APLICAR ESCALADO (igual que en entrenamiento)
+        # 4. APLICAR ESCALADO
         features_scaled = scaler.transform(input_features)
         
         # 5. PREDICCIÓN
@@ -346,25 +356,13 @@ async def predict_power(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 # =============================================================================
-# MANEJO DE ERRORES GLOBAL
-# =============================================================================
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    logger.error(f"HTTP error {exc.status_code}: {exc.detail}")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.detail, "timestamp": datetime.now().isoformat()}
-    )
-
-# =============================================================================
 # INICIALIZACIÓN
 # =============================================================================
 
 @app.on_event("startup")
 async def startup_event():
     """Evento de inicio de la aplicación"""
-    logger.info(" Iniciando SuperHero Power Predictor API...")
+    logger.info("Iniciando SuperHero Power Predictor API...")
     if MODEL_LOADED:
         logger.info("✅ API lista para recibir solicitudes")
     else:
@@ -374,7 +372,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         app, 
-        host="0.0.0.0", 
+        host="localhost", 
         port=8000,
         log_level="info"
     )
