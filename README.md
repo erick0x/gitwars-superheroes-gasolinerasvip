@@ -7,8 +7,8 @@
 - Saúl Isaías Bibiano Callejas
 - Alejandro Iram Ramírez Nava
 
-**🌐 API:** https://gasolinerasvip.onrender.com  
-**📚 Docs:** Revisar: nb_equipo_template.ipynb
+**🌐 API:** https://gasolinerasvip.onrender.com/docs  
+**📚 Docs:** Revisar notebooks/nb_equipo_template.ipynb
 
 ## 📋 Elementos Completados
 
@@ -76,5 +76,6 @@ Invoke-RestMethod -Uri "https://gasolinerasvip.onrender.com/info" -Method Get
 **Predict**
 $body = @{features = @{intelligence=50; strength=80; speed=60; durability=70; combat=55; height="185 cm"; weight="90 kg"}} | ConvertTo-Json
 Invoke-RestMethod -Uri "https://gasolinerasvip.onrender.com/predict" -Method Post -Body $body -ContentType "application/json"
+
 
 
